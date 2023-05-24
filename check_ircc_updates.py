@@ -10,11 +10,11 @@ To run the script, use the following command:
 
 To run the script in the background, use the following command:
 
-    $ nohup python check_ircc_updates.py &
+    $ nohup python check_ircc_updates.py > output.log &
 
-    If you then want to kill the process, use the following command:
+If you then want to kill the process, use the following command:
 
-    $ ps aux | grep check_ircc_updates.py
+    $ ps aux | grep 'check_ircc_updates.py' | grep -v grep
     $ kill -9 <PID>
 
 Notes
@@ -24,21 +24,23 @@ The script uses the Safari WebDriver, but you can use any WebDriver you want. Yo
 
 """
 import datetime
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.support.wait import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException
+import json
+import os
 import smtplib
-from email.mime.text import MIMEText
+import sys
+import time
 from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+
 import requests
-import time
-import os
-import json
+from selenium import webdriver
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.wait import WebDriverWait
 
 with open('config.json') as f:
     config = json.load(f)
@@ -422,6 +424,8 @@ def main():
             print('=======================================\n')
 
             time.sleep(CHECK_INTERVAL_SECONDS)  # sleep for CHECK_INTERVAL_SECONDS seconds
+
+            sys.stdout.flush()
 
 if __name__ == "__main__":
     main()

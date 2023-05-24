@@ -1,0 +1,5 @@
+python==3.11.3
+selenium==3.141.0
+smtplib==0.1.0
+requests==2.26.0
+email==4.0.1
