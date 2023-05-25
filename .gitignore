@@ -1,5 +1,5 @@
 config.json
-dump.py
-screenshots/*
+config_private.json
 last_updated.txt
 output.log
+dump.py

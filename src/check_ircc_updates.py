@@ -111,7 +111,7 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
 
-from purge_screenshots import purge_old_screenshots as pshots
+from src.purge_screenshots import purge_old_screenshots as pshots
 
 # Define logging configuration that'll be used to log
 # messages to the log file and the terminal.
@@ -124,43 +124,47 @@ logging.basicConfig(
     ]
 )
 
-# Open the config.json file with the login credentials
-# and other private configuration settings.
-with open('config.json') as f:
-    config = json.load(f)
+# Open the PRIVATE config file and load its contents into a dictionary
+with open('config_private.json') as f:
+    private_config = json.load(f)
+
+# Open the PUBLIC config file and load its contents into a dictionary
+with open('config_public.json') as f:
+    public_config = json.load(f)
 
 #
-# Set the configuration settings from the config file
-# These are private settings that should not be shared
-# with others, hence they are being read from a config
-# file instead of being hard-coded in the script.
+# Set the configuration settings from the PRIVATE config file.
+# These are private settings that should not be shared with others.
 #
-USERNAME_IRCC = config['USERNAME_IRCC']
-PASSWORD_IRCC = config['PASSWORD_IRCC']
-EMAIL_SERVER = config['EMAIL_SERVER']
-EMAIL_PORT = config['EMAIL_PORT']
-EMAIL_ADDRESS = config['EMAIL_ADDRESS']
-EMAIL_PASSWORD = config['EMAIL_PASSWORD']
-PUSH_USER = config['PUSH_USER']     # Optional
-PUSH_TOKEN = config['PUSH_TOKEN']       # Optional
+USERNAME_IRCC = private_config['USERNAME_IRCC']
+PASSWORD_IRCC = private_config['PASSWORD_IRCC']
+EMAIL_ADDRESS = private_config['EMAIL_ADDRESS']
+EMAIL_PASSWORD = private_config['EMAIL_PASSWORD']
+EMAIL_SERVER = private_config['EMAIL_SERVER']
+EMAIL_PORT = private_config['EMAIL_PORT']
+PUSH_USER = private_config['PUSH_USER']     # Optional
+PUSH_TOKEN = private_config['PUSH_TOKEN']       # Optional
 
 #
-# Set the configuration settings that are not private
+# Set the configuration settings from the PUBLIC config file.
+# These are more general/less sensitive settings.
 #
-LOGIN_URL = "https://tracker-suivi.apps.cic.gc.ca/en/login"
-DASHBOARD_URL = "https://tracker-suivi.apps.cic.gc.ca/en/dashboard"
+LOGIN_URL = public_config['LOGIN_URL']
+DASHBOARD_URL = public_config['DASHBOARD_URL']
+LAST_UPDATED_FILE = public_config['LAST_UPDATED_FILE']  # File to store last updated date
+SCREENSHOTS_DIR = public_config['SCREENSHOTS_DIR']  # Dir to store screenshots
 
-# This is the interval at which the script will check for updates:
+#
+# Set the configuration settings that are not in the config files.
+#
+# Interval at which the script will check for updates:
 CHECK_INTERVAL_SECONDS = 1 * 60 * 60        # 1 hr * 60 min/hr * 60 sec/min
 # Interval at which the WebDriver will be reinitialized:
-#   I've set it to 0.5 of the check interval because I think it needs to 
-#   be reinitialized before every check. Otherwise, it might
-#   get stuck on the login page.
 REINITIALIZATION_INTERVAL = CHECK_INTERVAL_SECONDS / 2
-LAST_UPDATED_FILE = "last_updated.txt"      # File to store last updated date
-SCREENSHOTS_DIR = "screenshots"     # Dir to store screenshots
-PURGE_SCREENSHOTS = True        # Whether to purge old screenshots
+# Choose whether to purge old screenshots:
+PURGE_SCREENSHOTS = True
 NUM_SCREENSHOTS_TO_KEEP = 1     # No. of screenshots to keep if purging
+
 
 @contextmanager
 def setup_webdriver():
@@ -204,6 +208,7 @@ def setup_webdriver():
     finally:
         driver.quit()
     # return driver, wait
+
 
 def login(driver, wait):
     """Log in to the IRCC portal.
@@ -257,6 +262,7 @@ def login(driver, wait):
     else:
         raise Exception("***Dashboard did not load inside login(). Current URL: " + driver.current_url + "***")
 
+
 def check_for_updates(driver, wait):
     """Check for updates on the IRCC portal.
 
@@ -307,6 +313,7 @@ def check_for_updates(driver, wait):
         update = False
         screenshot_path = take_screenshot(driver)
         send_notification(updated_date, update, screenshot_path)
+
 
 def take_screenshot(driver, update=False):
     """Take a screenshot of the IRCC portal.
@@ -435,7 +442,8 @@ def send_email(subject, body, screenshot_path=None):
         return
 
 def send_push_notification(title, message):
-    """Send a push notification using Pushover.
+    """
+    Send a push notification using Pushover.
 
     Parameters
     ----------
