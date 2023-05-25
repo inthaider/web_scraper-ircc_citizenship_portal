@@ -1,1 +1,5 @@
 config.json
+dump.py
+screenshots/*
+last_updated.txt
+output.log
