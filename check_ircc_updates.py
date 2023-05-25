@@ -12,6 +12,10 @@ To run the script in the background, use the following command:
 
     $ nohup python check_ircc_updates.py > output.log &
 
+Or if you have opened a screen session and want to run the script with output displayed in both the terminal and the log file, use the following command (where -u is used to force the output to be unbuffered):
+
+    $ `python -u check_ircc_updates.py | tee output.log`
+
 If you then want to kill the process, use the following command:
 
     $ ps aux | grep 'check_ircc_updates.py' | grep -v grep
@@ -32,6 +36,7 @@ import time
 from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+import traceback
 
 import requests
 from selenium import webdriver
@@ -57,7 +62,9 @@ PUSHOVER_TOKEN = config['PUSHOVER_TOKEN']
 
 LOGIN_URL = "https://tracker-suivi.apps.cic.gc.ca/en/login"
 DASHBOARD_URL = "https://tracker-suivi.apps.cic.gc.ca/en/dashboard"
-CHECK_INTERVAL_SECONDS = 1 * 60 * 60  # 1 hour
+CHECK_INTERVAL_SECONDS = 1 * 60 * 60        # 1 hour
+# CHECK_INTERVAL_SECONDS = 60        # 60 seconds
+REINITIALIZATION_INTERVAL = 6 * 60 * 60        # 6 hours
 LAST_UPDATED_FILE = "last_updated.txt"
 SCREENSHOTS_DIR = "screenshots"
 
@@ -75,10 +82,6 @@ def setup_webdriver():
     wait : selenium.webdriver.support.wait.WebDriverWait
         The WebDriverWait object.
     """
-    print('---------------------------------------')
-    print('----- Initializing WebDriver... -----')
-    print('---------------------------------------')
-
     options = Options()
     options.add_argument("--disable-blink-features=AutomationControlled")       # Disable the automation control warning
     options.add_argument("--headless")  # Run in headless mode
@@ -108,7 +111,7 @@ def login(driver, wait):
     driver.get(LOGIN_URL)  # open the login page
     driver.execute_script("document.body.style.zoom='30%'")
 
-    print('\n---------------------------------------')
+    print('---------------------------------------')
     print('----- SIGNING IN -----')
     print('---------------------------------------')
 
@@ -313,6 +316,7 @@ def send_email(subject, body, screenshot_path=None):
         print('!!!!!! EXCEPTION: OTHER inside send_email() !!!!!!!')
         print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
         print(f"EMAIL SEND FAILED -- An error occurred: {e}")
+        traceback.print_exc()
         print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n')
         return
 
@@ -330,7 +334,7 @@ def send_push_notification(title, message):
     -------
     None
     """
-    print('------ Sendin`g push notification... ------')
+    print('------ Sending push notification... ------')
 
     url = "https://api.pushover.net/1/messages.json"
     data = {
@@ -349,16 +353,47 @@ def send_push_notification(title, message):
 def main():
     """Main function.
     """
-    print('\n=======================================')
+    print('\n\n=======================================')
     print('=======================================')
     print('=======================================')
-    print('===== IRCC Portal Update Checker ======')
+    print('===== IRCC PORTAL UPDATE CHECKER ======')
     print('=======================================')
     print(f'|| Date & Time: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")} ||')
-    print('=======================================\n\n')
+    print('=======================================')
+    print('----- Initial WebDriver Setup... -----')
+    print('=======================================')
+    # Initial WebDriver setup
     driver, wait = setup_webdriver()
-
+    print('----- First WebDriver Initialized. -----\n')
+    
+    start_time = time.time()
+    i = 1
+    j = 1
     while True:
+        print('\n\n=======================================')
+        print(f'====== STARTING UPDATE CHECK #{i} =======')
+        print(f'|| Date & Time: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")} ||')
+        print('=======================================')
+
+        # Reinitialize WebDriver every few hours
+        if time.time() - start_time > REINITIALIZATION_INTERVAL:
+            print('---------------------------------------')
+            print(f'----- Closing WebDriver #{j} -----')
+            print('---------------------------------------')
+            # Close the previous WebDriver instance before reinitializing
+            if 'driver' in locals():
+                driver.quit()
+            print(f'----- WebDriver #{j} Closed. -----')
+
+            j += 1
+            print('---------------------------------------')
+            print(f'----- Reinitializing WebDriver #{j} -----')
+            print('---------------------------------------')
+            driver, wait = setup_webdriver()
+            print(f'----- WebDriver #{j} Reinitialized. -----\n')
+
+            start_time = time.time()
+
         try:
             login(driver, wait)
 
@@ -367,22 +402,34 @@ def main():
             print('!!!!!! EXCEPTION: TIMEOUT after trying login() !!!!!!!')
             print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
             print(f"SIGN IN FAILED -- TimeoutException -- Either the username or password field was not located after 10 seconds: {e}")
+            traceback.print_exc()
             print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n')
 
             screenshot_path = take_screenshot(driver)
             send_email("IRCC Portal Script Error", f"SIGN IN FAILED  after trying login(): TimeoutException occurred: {e}", screenshot_path)
             # send_push_notification("IRCC Portal Script Error", f"TimeoutException occurred: {e}")
 
+            if 'driver' in locals():
+                driver.quit()
+
+            sys.exit("\n\n!!! EXITING SCRIPT DUE TO UNHANDLED EXCEPTION !!!\n\n")
+
         except Exception as e:
             print('\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
             print('!!!!!! EXCEPTION: OTHER after trying login() !!!!!!!')
             print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
             print(f"SIGN IN FAILED -- An error occurred: {e}")
+            traceback.print_exc()
             print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n')
 
             screenshot_path = take_screenshot(driver)
             send_email("IRCC Portal Script Error", f"SIGN IN FAILED after trying login(): An error occurred: {e}", screenshot_path)
             # send_push_notification("IRCC Portal Script Error", f"An error occurred: {e}")
+
+            if 'driver' in locals():
+                driver.quit()
+
+            sys.exit("\n\n!!! EXITING SCRIPT DUE TO UNHANDLED EXCEPTION !!!\n\n")
 
 
         try:
@@ -393,39 +440,58 @@ def main():
             print('!!!!!! EXCEPTION: TIMEOUT after trying check_for_updates() !!!!!!!')
             print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
             print(f"UPDATE CHECK FAILED -- TimeoutException -- The \'Updated\' field wasn't located after 10 seconds: {e}")
+            traceback.print_exc()
             print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n')
 
             screenshot_path = take_screenshot(driver)
             send_email("IRCC Portal Script Error", f"CHECKING FOR UPDATE FAILED after trying check_for_updates(): TimeoutException occurred: {e}", screenshot_path)
             # send_push_notification("IRCC Portal Script Error", f"TimeoutException occurred: {e}")
 
+            if 'driver' in locals():
+                driver.quit()
+
+            sys.exit("\n\n!!! EXITING SCRIPT DUE TO UNHANDLED EXCEPTION !!!\n\n")
+
         except Exception as e:
             print('\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
             print('!!!!!! EXCEPTION: OTHER after trying check_for_updates() !!!!!!!')
             print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
             print(f"UPDATE CHECK FAILED -- An error occurred: {e}")
+            traceback.print_exc()
             print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n')
 
             screenshot_path = take_screenshot(driver)
             send_email("IRCC Portal Script Error", f"UPDATE CHECK FAILED after trying check_for_updates(): An error occurred: {e}", screenshot_path)
             # send_push_notification("IRCC Portal Script Error", f"An error occurred: {e}")
+
+            if 'driver' in locals():
+                driver.quit()
+
+            sys.exit("\n\n!!! EXITING SCRIPT DUE TO UNHANDLED EXCEPTION !!!\n\n")
             
         finally:
-            # Close the WebDriver
-            driver.quit()
-            print(f"\n*zzz* Sleeping for {CHECK_INTERVAL_SECONDS} seconds before checking again. *zzz*")
-
-            print('\n\n=======================================')
+            print('\n=======================================')
             print(f'|| Date & Time: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")} ||')
             print('=======================================')
-            print('===== IRCC UPDATE SCRIPT END ======')
+            print(f'===== ENDING UPDATE CHECK #{i} ======')
             print('=======================================')
+            print(f"*zzz* Sleeping for {CHECK_INTERVAL_SECONDS} seconds before checking again. *zzz*")
             print('=======================================')
-            print('=======================================\n')
-
-            time.sleep(CHECK_INTERVAL_SECONDS)  # sleep for CHECK_INTERVAL_SECONDS seconds
+            print('=======================================\n\n\n')
 
             sys.stdout.flush()
+            time.sleep(CHECK_INTERVAL_SECONDS)  # sleep for CHECK_INTERVAL_SECONDS seconds
+
+        i += 1
+
+    # print('\n\n=======================================')
+    # print(f'|| Date & Time: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")} ||')
+    # print('=======================================')
+    # print('===== IRCC UPDATE SCRIPT END ======')
+    # print('=======================================')
+    # print('=======================================')
+    # print('=======================================\n\n')
+
 
 if __name__ == "__main__":
     main()
