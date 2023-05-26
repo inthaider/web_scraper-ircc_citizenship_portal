@@ -3,5 +3,5 @@
     "DASHBOARD_URL": "https://tracker-suivi.apps.cic.gc.ca/en/dashboard",
     
     "LAST_UPDATED_FILE": "last_updated.txt",
-    "SCREENSHOTS_DIR": "screenshots"
+    "SCREENSHOTS_DIR": "../screenshots"
 }

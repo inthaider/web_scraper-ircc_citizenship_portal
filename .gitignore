@@ -3,5 +3,8 @@ config_private.json
 last_updated.txt
 output.log
 
+screenshots/*
+!screenshots/.gitkeep
+
 .DS_Store
 dump.py

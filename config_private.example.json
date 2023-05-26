@@ -1,0 +1,12 @@
+{
+    "USERNAME_IRCC": "your_username",
+    "PASSWORD_IRCC": "your_password",
+
+    "EMAIL_ADDRESS": "your_email@email_provider.com",
+    "EMAIL_PASSWORD": "your_email_password",
+    "EMAIL_SERVER": "your_email_server",
+    "EMAIL_PORT": 123,
+    
+    "PUSH_USER": "your_push_notification_service_user_key",
+    "PUSH_TOKEN": "your_push_notification_service_user_key"
+}
