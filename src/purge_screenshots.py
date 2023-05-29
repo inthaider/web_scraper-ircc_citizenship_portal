@@ -42,6 +42,7 @@ def purge_old_screenshots(dir_path, num_to_keep=10):
     files.sort(key=lambda x: x[1])
 
     # If there are more than num_to_keep files, delete the oldest ones.
-    while len(files) > num_to_keep:
+    # The -1 is there because we have a .gitkeep file in the screenshots directory.
+    while (len(files) - 1) > num_to_keep:
         oldest_file = files.pop(0)
         os.remove(os.path.join(dir_path, oldest_file[0]))

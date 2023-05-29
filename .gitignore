@@ -8,3 +8,7 @@ screenshots/*
 
 .DS_Store
 dump.py
+
+src/__pycache__/*
+*/__pycache__/*
+__pycache__/*

@@ -122,7 +122,7 @@ from purge_screenshots import purge_old_screenshots as pshots
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(message)s",
-    handlers=[logging.FileHandler("ircc_portal.log"), logging.StreamHandler()],
+    handlers=[logging.FileHandler("output.log"), logging.StreamHandler()],
 )
 
 # Open the PRIVATE config file and load its contents into a dictionary
@@ -161,13 +161,21 @@ SCREENSHOTS_DIR = public_config["SCREENSHOTS_DIR"]  # Dir to store screenshots
 # Set the configuration settings that are not in the config files.
 #
 # Interval at which the script will check for updates:
-CHECK_INTERVAL_HOURS = 1
-CHECK_INTERVAL_SECONDS = CHECK_INTERVAL_HOURS * 60 * 60  # 1 hr * 60 min/hr * 60 sec/min
-# Interval at which the WebDriver will be reinitialized:
-REINITIALIZATION_INTERVAL = CHECK_INTERVAL_SECONDS / 2
+CHECK_INTERVAL_HOURS = 3  # 3 hr
+CHECK_INTERVAL_SECONDS = (
+    CHECK_INTERVAL_HOURS * 60 * 60
+)  # num_hrs * 60 min/hr * 60 sec/min
+# Do you want the driver to be reinitialized only periodically or after every check? If the latter, set this to True:
+REINIT_DRIVER_EVERYTIME = True
+# If the driver is to be reinitialized only intermittently, set the interval at which it will be reinitialized:
+REINITIALIZATION_INTERVAL = None
+if not REINIT_DRIVER_EVERYTIME:
+    REINITIALIZATION_INTERVAL = CHECK_INTERVAL_SECONDS / 2
+# Do you want the driver to be headless? Headless means that the browser will run in the background without opening a window. Set this to True if you want the browser to run in the background:
+HEADLESS = True
 # Choose whether to purge old screenshots:
 PURGE_SCREENSHOTS = True
-NUM_SCREENSHOTS_TO_KEEP = 1  # No. of screenshots to keep if purging
+NUM_SCREENSHOTS_TO_KEEP = 5  # No. of screenshots to keep if purging
 
 
 @contextmanager
@@ -203,7 +211,7 @@ def setup_webdriver():
     options.add_argument(
         "--disable-blink-features=AutomationControlled"
     )  # Disable the automation control warning
-    options.add_argument("--headless")  # Run in headless mode
+    options.add_argument("--headless") if HEADLESS else None  # Set headless mode
 
     driver = webdriver.Chrome(options=options)  # initialize the WebDriver
     driver.maximize_window()  # maximize the window
@@ -244,30 +252,32 @@ def login(driver, wait):
     username_field = wait.until(EC.element_to_be_clickable((By.ID, "uci")))
     username_field.send_keys(USERNAME_IRCC)
 
-    # Wait for the password field to be located and input password
+    # Wait for the password field to be located to input password
     password_field = wait.until(EC.element_to_be_clickable((By.ID, "password")))
-    # Check if the password field is selected
-    # if driver.switch_to.active_element != password_field:
-    #     # If not, click the password field to select it
-    #     password_field.click()
-    password_field.send_keys(PASSWORD_IRCC)
-    password_field.send_keys(Keys.RETURN)  # press enter
-    # Wait until the "Sign In" button is clickable and click it
-    # sign_in_button = wait.until(EC.element_to_be_clickable((By.CLASS_NAME, 'btn-sign-in')))
-    # sign_in_button.click()
 
-    # Add delay
-    time.sleep(2)
-    # Check if the login was successful
-    if driver.current_url == DASHBOARD_URL:
+    # Use a while loop to check if the dashboard has loaded
+    dashboard_loaded = False
+    num_tries = 0
+    while not dashboard_loaded and num_tries < 2:  # try twice
+        password_field.send_keys(PASSWORD_IRCC)  # input password
+        password_field.send_keys(Keys.RETURN)  # press enter
+        time.sleep(4)  # add a delay to allow the page to load
+
+        # Check if the dashboard loaded by comparing the current URL to the
+        # dashboard URL
+        if driver.current_url == DASHBOARD_URL:
+            dashboard_loaded = True
+        else:
+            num_tries += 1
+
+    if dashboard_loaded:
         logging.info("======")
         logging.info("SIGN IN SUCCESSFUL...!")
         logging.info("Current URL: " + driver.current_url)
         logging.info("======")
-        return
     else:
         raise Exception(
-            "***Dashboard did not load inside login(). Current URL: "
+            "***Dashboard did NOT load inside login()! Current URL: "
             + driver.current_url
             + "***"
         )
@@ -507,184 +517,211 @@ def main():
     logging.info("=======================================")
     logging.info("===== IRCC PORTAL UPDATE CHECKER ======")
     logging.info("=======================================")
-    # logging.info(
-    #     f'|| Date & Time: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")} ||'
-    # )
-    logging.info("=======================================")
-    logging.info("----- Initial WebDriver Setup... -----")
-    logging.info("=======================================")
 
-    # Initial WebDriver setup
-    with setup_webdriver() as (driver, wait):
-        logging.info("----- First WebDriver Initialized. -----\n\n\n")
+    # # Initial WebDriver setup
+    # logging.info("=======================================")
+    # logging.info("----- Initial WebDriver Setup... -----")
+    # logging.info("=======================================")
+    # logging.info("----- First WebDriver Initialized. -----\n\n\n")
 
-        start_time = time.time()
-        i = 1
-        j = 1
-        while True:
-            logging.info("=======================================")
-            logging.info(f"====== STARTING UPDATE CHECK #{i} =======")
-            # logging.info(
-            #     f'|| Date & Time: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")} ||'
-            # )
-            logging.info("=======================================")
+    i = 1
+    j = 1
+    while True:
+        logging.info("---------------------------------------")
+        logging.info(f"----- Initializing WebDriver No. {j} -----")
+        logging.info("---------------------------------------")
 
-            # Reinitialize WebDriver every few hours
-            if time.time() - start_time > REINITIALIZATION_INTERVAL:
-                logging.info("---------------------------------------")
-                logging.info(f"----- Closing WebDriver #{j} -----")
-                logging.info("---------------------------------------")
+        with setup_webdriver() as (driver, wait):
+            logging.info(f"----- WebDriver No. {j} Reinitialized. -----\n")
 
-                # Close the previous WebDriver instance before reinitializing
-                if "driver" in locals():
-                    driver.quit()
-                logging.info(f"----- WebDriver #{j} Closed. -----")
-
-                j += 1
-                logging.info("---------------------------------------")
-                logging.info(f"----- Reinitializing WebDriver #{j} -----")
-                logging.info("---------------------------------------")
-
-                # Reinitialize WebDriver
-                with setup_webdriver() as (driver, wait):
-                    logging.info(f"----- WebDriver #{j} Reinitialized. -----\n")
-
-                start_time = time.time()
-
-            try:
-                login(driver, wait)
-
-            except TimeoutException as e:
-                logging.error(
-                    "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-                )
-                logging.error("!!!!!! EXCEPTION: TIMEOUT after trying login() !!!!!!!")
-                logging.error(
-                    "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-                )
-                logging.error(
-                    "SIGN IN FAILED -- TimeoutException -- Either the username or password field was not located after 10 seconds"
-                )
-                logging.exception(e)
-                logging.error(
-                    "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-                )
-
-                screenshot_path = take_screenshot(driver)
-                send_email(
-                    "IRCC Portal Script Error",
-                    f"SIGN IN FAILED after trying login() -- TimeoutException occurred: {e}",
-                    screenshot_path,
-                )
-
-                sys.stdout.flush()  # flush stdout buffer
-                sys.exit(
-                    "\n\n!!! EXITING SCRIPT DUE TO UNHANDLED EXCEPTION !!!\n !!! TimeoutException in login() !!!\n\n"
-                )
-
-            except Exception as e:
-                logging.error(
-                    "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-                )
-                logging.error("!!!!!! EXCEPTION: OTHER after trying login() !!!!!!!")
-                logging.error(
-                    "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-                )
-                logging.error("SIGN IN FAILED -- An error occurred")
-                logging.exception(e)
-                logging.error(
-                    "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-                )
-
-                screenshot_path = take_screenshot(driver)
-                send_email(
-                    "IRCC Portal Script Error",
-                    f"SIGN IN FAILED after trying login() -- An error occurred: {e}",
-                    screenshot_path,
-                )
-
-                sys.stdout.flush()  # flush stdout buffer
-                sys.exit(
-                    "\n\n!!! EXITING SCRIPT DUE TO UNHANDLED EXCEPTION !!!\n !!! Exception in login() !!!\n\n"
-                )
-
-            try:
-                check_for_updates(driver, wait)
-
-            except TimeoutException as e:
-                ("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-                logging.error("!!!!!! EXCEPTION: TIMEOUT after trying login() !!!!!!!")
-                logging.error(
-                    "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-                )
-                logging.error(
-                    "UPDATE CHECK FAILED -- TimeoutException -- The 'Updated' field wasn't located after 10 seconds"
-                )
-                logging.exception(e)
-                logging.error(
-                    "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-                )
-
-                screenshot_path = take_screenshot(driver)
-                send_email(
-                    "IRCC Portal Script Error",
-                    f"CHECKING FOR UPDATE FAILED after trying check_for_updates() -- TimeoutException occurred: {e}",
-                    screenshot_path,
-                )
-
-                sys.stdout.flush()  # flush stdout buffer
-                sys.exit(
-                    "\n\n!!! EXITING SCRIPT DUE TO UNHANDLED EXCEPTION !!!\n !!! TimeoutException in check_for_updates() !!!\n\n"
-                )
-
-            except Exception as e:
-                logging.error(
-                    "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-                )
-                logging.error("!!!!!! EXCEPTION: OTHER after trying login() !!!!!!!")
-                logging.error(
-                    "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-                )
-                logging.error("UPDATE CHECK FAILED -- An error occurred")
-                logging.exception(e)
-                ("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-
-                screenshot_path = take_screenshot(driver)
-                send_email(
-                    "IRCC Portal Script Error",
-                    f"UPDATE CHECK FAILED after trying check_for_updates() -- An error occurred: {e}",
-                    screenshot_path,
-                )
-
-                sys.stdout.flush()  # flush stdout buffer
-                sys.exit(
-                    "\n\n!!! EXITING SCRIPT DUE TO UNHANDLED EXCEPTION !!!\n !!! Exception in check_for_updates() !!!\n\n"
-                )
-
-            finally:
-                # Purge old screenshots if PURGE_SCREENSHOTS is True else do nothing.
-                pshots(
-                    SCREENSHOTS_DIR, NUM_SCREENSHOTS_TO_KEEP
-                ) if PURGE_SCREENSHOTS else None
-
+            start_time = time.time()
+            while True:
                 logging.info("=======================================")
-                # logging.info(
-                #     f'|| Date & Time: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")} ||'
-                # )
-                logging.info(f"======= ENDING UPDATE CHECK #{i} =======")
+                logging.info(f"====== STARTING UPDATE CHECK No. {i} =======")
                 logging.info("=======================================")
-                logging.info(
-                    f"*zzz* Sleeping for {CHECK_INTERVAL_HOURS} hour(s) before checking again. *zzz*"
-                )
-                logging.info("=======================================")
-                logging.info("=======================================\n\n\n")
 
-                sys.stdout.flush()  # flush stdout buffer
-                time.sleep(
-                    CHECK_INTERVAL_SECONDS
-                )  # sleep for CHECK_INTERVAL_SECONDS seconds
+                try:
+                    login(driver, wait)
 
-            i += 1
+                except TimeoutException as e:
+                    logging.error(
+                        "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+                    )
+                    logging.error(
+                        "!!!!!! EXCEPTION: TIMEOUT after trying login() !!!!!!!"
+                    )
+                    logging.error(
+                        "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+                    )
+                    logging.error(
+                        "SIGN IN FAILED -- TimeoutException -- Either the username or password field was not located after 10 seconds"
+                    )
+                    logging.exception(e)
+                    logging.error(
+                        "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+                    )
+
+                    screenshot_path = take_screenshot(driver)
+                    send_email(
+                        "IRCC Portal Script Error",
+                        f"SIGN IN FAILED after trying login() -- TimeoutException occurred: {e}",
+                        screenshot_path,
+                    )
+
+                    sys.stdout.flush()  # flush stdout buffer
+                    sys.exit(
+                        "\n\n!!! EXITING SCRIPT DUE TO UNHANDLED EXCEPTION !!!\n !!! TimeoutException in login() !!!\n\n"
+                    )
+
+                except Exception as e:
+                    logging.error(
+                        "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+                    )
+                    logging.error(
+                        "!!!!!! EXCEPTION: OTHER after trying login() !!!!!!!"
+                    )
+                    logging.error(
+                        "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+                    )
+                    logging.error("SIGN IN FAILED -- An error occurred")
+                    logging.exception(e)
+                    logging.error(
+                        "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+                    )
+
+                    screenshot_path = take_screenshot(driver)
+                    send_email(
+                        "IRCC Portal Script Error",
+                        f"SIGN IN FAILED after trying login() -- An error occurred: {e}",
+                        screenshot_path,
+                    )
+
+                    sys.stdout.flush()  # flush stdout buffer
+                    sys.exit(
+                        "\n\n!!! EXITING SCRIPT DUE TO UNHANDLED EXCEPTION !!!\n !!! Exception in login() !!!\n\n"
+                    )
+
+                try:
+                    check_for_updates(driver, wait)
+
+                except TimeoutException as e:
+                    ("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+                    logging.error(
+                        "!!!!!! EXCEPTION: TIMEOUT after trying login() !!!!!!!"
+                    )
+                    logging.error(
+                        "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+                    )
+                    logging.error(
+                        "UPDATE CHECK FAILED -- TimeoutException -- The 'Updated' field wasn't located after 10 seconds"
+                    )
+                    logging.exception(e)
+                    logging.error(
+                        "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+                    )
+
+                    screenshot_path = take_screenshot(driver)
+                    send_email(
+                        "IRCC Portal Script Error",
+                        f"CHECKING FOR UPDATE FAILED after trying check_for_updates() -- TimeoutException occurred: {e}",
+                        screenshot_path,
+                    )
+
+                    sys.stdout.flush()  # flush stdout buffer
+                    sys.exit(
+                        "\n\n!!! EXITING SCRIPT DUE TO UNHANDLED EXCEPTION !!!\n !!! TimeoutException in check_for_updates() !!!\n\n"
+                    )
+
+                except Exception as e:
+                    logging.error(
+                        "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+                    )
+                    logging.error(
+                        "!!!!!! EXCEPTION: OTHER after trying login() !!!!!!!"
+                    )
+                    logging.error(
+                        "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+                    )
+                    logging.error("UPDATE CHECK FAILED -- An error occurred")
+                    logging.exception(e)
+                    ("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+
+                    screenshot_path = take_screenshot(driver)
+                    send_email(
+                        "IRCC Portal Script Error",
+                        f"UPDATE CHECK FAILED after trying check_for_updates() -- An error occurred: {e}",
+                        screenshot_path,
+                    )
+
+                    sys.stdout.flush()  # flush stdout buffer
+                    sys.exit(
+                        "\n\n!!! EXITING SCRIPT DUE TO UNHANDLED EXCEPTION !!!\n !!! Exception in check_for_updates() !!!\n\n"
+                    )
+
+                finally:
+                    # Purge old screenshots if PURGE_SCREENSHOTS is True else do nothing.
+                    pshots(
+                        SCREENSHOTS_DIR, NUM_SCREENSHOTS_TO_KEEP
+                    ) if PURGE_SCREENSHOTS else None
+
+                    i += 1
+
+                    # If REINIT_DRIVER_EVERYTIME is True OR (if it's False AND the reinitialization interval has elapsed), then break out of the inner while loop
+                    current_time = time.time()
+                    if REINIT_DRIVER_EVERYTIME or (
+                        REINITIALIZATION_INTERVAL is not None
+                        and (current_time - start_time) > REINITIALIZATION_INTERVAL
+                    ):
+                        break
+
+                    # # If REINIT_DRIVER_EVERYTIME is True, then close the WebDriver
+                    # if REINIT_DRIVER_EVERYTIME and "driver" in locals():
+                    #     logging.info("---------------------------------------")
+                    #     logging.info(f"----- Closing WebDriver No. {j} -----")
+                    #     logging.info("---------------------------------------")
+                    #     driver.quit()
+                    #     logging.info(f"----- WebDriver No. {j} Closed. -----")
+                    #     j += 1
+
+                    logging.info("=======================================")
+                    logging.info(f"======= ENDING UPDATE CHECK No. {i} =======")
+                    logging.info("=======================================")
+                    logging.info(
+                        f"*zzz* Sleeping for {CHECK_INTERVAL_HOURS} hour(s) before checking again. *zzz*"
+                    )
+                    logging.info("=======================================")
+                    logging.info("=======================================\n\n\n")
+                    sys.stdout.flush()  # flush stdout buffer
+
+                    time.sleep(
+                        CHECK_INTERVAL_SECONDS
+                    )  # sleep for CHECK_INTERVAL_SECONDS seconds
+
+                # End of inner while loop.
+
+            logging.info("---------------------------------------")
+            logging.info(f"----- Closing WebDriver No. {j} -----")
+            logging.info("---------------------------------------")
+            sys.stdout.flush()  # flush stdout buffer
+
+            # End of with block.
+
+        logging.info(f"----- WebDriver No. {j} Closed. -----")
+        j += 1
+
+        logging.info("=======================================")
+        logging.info(f"======= ENDING UPDATE CHECK No. {i} =======")
+        logging.info("=======================================")
+        logging.info(
+            f"*zzz* Sleeping for {CHECK_INTERVAL_HOURS} hour(s) before checking again. *zzz*"
+        )
+        logging.info("=======================================")
+        logging.info("=======================================\n\n\n")
+        sys.stdout.flush()  # flush stdout buffer
+
+        time.sleep(CHECK_INTERVAL_SECONDS)  # sleep for CHECK_INTERVAL_SECONDS seconds
+
+        # End of outer while loop.
 
 
 if __name__ == "__main__":
