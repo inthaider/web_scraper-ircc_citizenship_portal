@@ -1,4 +1,4 @@
-# IRCC Citizenship Update Checker
+# IRCC Citizenship Portal Update Checker
 
 This project contains a Python script (`check_ircc_updates.py`) that checks for updates on the IRCC (Immigration, Refugees and Citizenship Canada) portal and sends a notification if there is an update. The script is designed to be run constantly in the background. It checks for updates at a specified interval, and if there is an update, it sends a notification via email and/or push. Note that push notifications setup isn't functional yet, I'm still working on it.
 
