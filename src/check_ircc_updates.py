@@ -313,9 +313,14 @@ def check_for_updates(driver, wait):
     with open(LAST_UPDATED_FILE, "r") as f:
         last_updated_date = f.read().strip()
 
+    # Get current date
+    now = datetime.datetime.now()
+    # Format date as "Month day, year"
+    date_in_words = now.strftime("%B %d, %Y")
     if updated_date != last_updated_date:
         logging.info("======")
         logging.info("UPDATE FOUND...!")
+        logging.info(f"The IRCC portal was updated on {updated_date}.")
         logging.info("======")
 
         update = True
@@ -328,6 +333,7 @@ def check_for_updates(driver, wait):
     else:
         logging.info("======")
         logging.info("NO UPDATE FOUND...!")
+        logging.info(f"Last update was on {updated_date}.")
         logging.info("======")
 
         update = False
@@ -484,9 +490,8 @@ def send_email(subject, body, screenshot_path=None):
 
 
 def send_push_notification(title, message):
-    """
-    Send a push notification using Pushover.
-
+    """Send a push notification.
+    
     Parameters
     ----------
     title : str
@@ -497,6 +502,11 @@ def send_push_notification(title, message):
     Returns
     -------
     None
+    
+    Notes
+    -----
+    Pushover API: https://pushover.net/api.
+    Note that this method is currently not operational. If you want to use it, you will need to create a Pushover account and get your own API token and user key.
     """
     logging.info("------ Sending push notification... ------")
 
